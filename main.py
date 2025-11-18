@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parameter Processing')
 
     # Basic arguments
-    parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
+    parser.add_argument('--dataset', type=str, default='MNIST', help='dataset')
     parser.add_argument('--model', type=str, default='ResNet18', help='model')
     parser.add_argument('--selection', type=str, default="uniform", help="selection method")
     parser.add_argument('--num_exp', type=int, default=5, help='the number of experiments')
