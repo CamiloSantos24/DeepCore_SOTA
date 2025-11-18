@@ -1,6 +1,8 @@
 import time, torch
 from argparse import ArgumentTypeError
 from prefetch_generator import BackgroundGenerator
+import numpy as np 
+import os 
 
 
 class WeightedSubset(torch.utils.data.Subset):
@@ -57,6 +59,46 @@ def train(train_loader, network, criterion, optimizer, epoch, args, rec):
 
     record_train_stats(rec, epoch, losses.avg, top1.avg, optimizer.state_dict()['param_groups'][0]['lr'])
 
+def load_mnist_data_subset(data_path="../data/MNIST/subset"):
+    """
+    Load MNIST subset data from .npz files.
+    
+    Args:
+        data_path: Path to the subset directory (default: "../data/MNIST/subset")
+    
+    Returns:
+        X_train: Training images tensor
+        y_train: Training labels tensor
+        X_val: Validation images tensor
+        y_val: Validation labels tensor
+        X_test: Test images tensor
+        y_test: Test labels tensor
+    """
+    # Load train data
+    train_path = os.path.join(data_path, "mnist-train.npz")
+    train_data = np.load(train_path)
+    X_train = torch.from_numpy(train_data['images']).float()
+    y_train = torch.from_numpy(train_data['labels']).long()
+    
+    data_path_val_test = '../data/MNIST/subset'
+    
+    # Load validation data
+    val_path = os.path.join(data_path_val_test, "mnist-val.npz")
+    val_data = np.load(val_path)
+    X_val = torch.from_numpy(val_data['images']).float()
+    y_val = torch.from_numpy(val_data['labels']).long()
+    
+    # Load test data
+    test_path = os.path.join(data_path_val_test, "mnist-test.npz")
+    test_data = np.load(test_path)
+    X_test = torch.from_numpy(test_data['images']).float()
+    y_test = torch.from_numpy(test_data['labels']).long()
+    
+    print(f"Loaded train data: {X_train.shape}")
+    print(f"Loaded validation data: {X_val.shape}")
+    print(f"Loaded test data: {X_test.shape}")
+    
+    return X_train, y_train, X_val, y_val, X_test, y_test
 
 def test(test_loader, network, criterion, epoch, args, rec):
     batch_time = AverageMeter('Time', ':6.3f')
