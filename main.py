@@ -205,7 +205,7 @@ def main():
             if len(models) > 1:
                 print("| Training on model %s" % model)
 
-            network = nets.__dict__[model](channel, num_classes, im_size).to(args.device)
+            network = nets.__dict__[model](channel, num_classes, im_size)
 
             if args.device == "cpu":
                 print("Using CPU.")
@@ -214,6 +214,11 @@ def main():
                 network = nets.nets_utils.MyDataParallel(network, device_ids=args.gpu)
             elif torch.cuda.device_count() > 1:
                 network = nets.nets_utils.MyDataParallel(network).cuda()
+            else:
+                # Una sola GPU visible o modo CPU
+                network = network.to(args.device)
+                
+            print(f"Model device: {next(network.parameters()).device}")
 
             if "state_dict" in checkpoint.keys():
                 # Loading model state_dict
