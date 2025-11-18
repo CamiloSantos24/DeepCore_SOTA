@@ -16,7 +16,7 @@ class WeightedSubset(torch.utils.data.Subset):
         return self.dataset[self.indices[idx]], self.weights[idx]
 
 
-def train(train_loader, network, criterion, optimizer, scheduler, epoch, args, rec, if_weighted: bool = False):
+def train(train_loader, network, criterion, optimizer, epoch, args, rec):
     """Train for one epoch on the training set"""
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -28,21 +28,11 @@ def train(train_loader, network, criterion, optimizer, scheduler, epoch, args, r
     end = time.time()
     for i, contents in enumerate(train_loader):
         optimizer.zero_grad()
-        if if_weighted:
-            target = contents[0][1].to(args.device)
-            input = contents[0][0].to(args.device)
-
-            # Compute output
-            output = network(input)
-            weights = contents[1].to(args.device).requires_grad_(False)
-            loss = torch.sum(criterion(output, target) * weights) / torch.sum(weights)
-        else:
-            target = contents[1].to(args.device)
-            input = contents[0].to(args.device)
-
-            # Compute output
-            output = network(input)
-            loss = criterion(output, target).mean()
+        
+        target = contents[1].to(args.device)
+        input = contents[0].to(args.device)        # Compute output
+        output = network(input)
+        loss = criterion(output, target).mean()
 
         # Measure accuracy and record loss
         prec1 = accuracy(output.data, target, topk=(1,))[0]
@@ -51,8 +41,7 @@ def train(train_loader, network, criterion, optimizer, scheduler, epoch, args, r
 
         # Compute gradient and do SGD step
         loss.backward()
-        optimizer.step()
-        scheduler.step()
+        optimizer.step()        
 
         # Measure elapsed time
         batch_time.update(time.time() - end)

@@ -71,27 +71,8 @@ def main():
        
     for epoch in range(1, args.epochs):
         # train for one epoch
-        train(train_loader, network, criterion, optimizer, scheduler, epoch, args, rec, if_weighted=if_weighted)
-        # evaluate on validation set
-        if args.test_interval > 0 and (epoch + 1) % args.test_interval == 0:
-            prec1 = test(test_loader, network, criterion, epoch, args, rec)
-            # remember best prec@1 and save checkpoint
-            is_best = prec1 > best_prec1
-            if is_best:
-                best_prec1 = prec1
-                if args.save_path != "":
-                    rec = record_ckpt(rec, epoch)
-                    save_checkpoint({"exp": exp,
-                                     "epoch": epoch + 1,
-                                     "state_dict": network.state_dict(),
-                                     "opt_dict": optimizer.state_dict(),
-                                     "best_acc1": best_prec1,
-                                     "rec": rec,
-                                     "subset": subset,
-                                     "sel_args": selection_args},
-                                    os.path.join(args.save_path, checkpoint_name + (
-                                        "" if model == args.model else model + "_") + "unknown.ckpt"),
-                                    epoch=epoch, prec=best_prec1)
+        train(train_loader, network, criterion, optimizer, epoch, args, rec)
+        # evaluate on validation set        
    
 
 if __name__ == '__main__':
