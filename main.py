@@ -27,31 +27,10 @@ def main():
     parser.add_argument('--seed', default=int(time.time() * 1000) % 100000, type=int, help="random seed")
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
-    parser.add_argument("--cross", type=str, nargs="+", default=None, help="models for cross-architecture experiments")
-
+    
     # Optimizer and scheduler
-    parser.add_argument('--optimizer', default="SGD", help='optimizer to use, e.g. SGD, Adam')
-    parser.add_argument('--lr', type=float, default=0.1, help='learning rate for updating network parameters')
-    parser.add_argument('--min_lr', type=float, default=1e-4, help='minimum learning rate')
-    parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-                        help='momentum (default: 0.9)')
-    parser.add_argument('-wd', '--weight_decay', default=5e-4, type=float,
-                        metavar='W', help='weight decay (default: 5e-4)',
-                        dest='weight_decay')
-    parser.add_argument("--nesterov", default=True, type=str_to_bool, help="if set nesterov")
-    parser.add_argument("--scheduler", default="CosineAnnealingLR", type=str, help=
-    "Learning rate scheduler")
-    parser.add_argument("--gamma", type=float, default=.5, help="Gamma value for StepLR")
-    parser.add_argument("--step_size", type=float, default=50, help="Step size for StepLR")
-
-    # Training
-    parser.add_argument('--batch', '--batch-size', "-b", default=256, type=int, metavar='N',
-                        help='mini-batch size (default: 256)')
-    parser.add_argument("--train_batch", "-tb", default=None, type=int,
-                     help="batch size for training, if not specified, it will equal to batch size in argument --batch")
-    parser.add_argument("--selection_batch", "-sb", default=None, type=int,
-                     help="batch size for selection, if not specified, it will equal to batch size in argument --batch")
-
+    parser.add_argument('--lr', type=float, default=0.01, help='learning rate for updating network parameters')
+       
     # Testing
     parser.add_argument("--test_interval", '-ti', default=1, type=int, help=
     "the number of training epochs to be preformed between two test epochs; a value of 0 means no test will be run (default: 1)")
@@ -90,10 +69,7 @@ def main():
     args = parser.parse_args()
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    if args.train_batch is None:
-        args.train_batch = args.batch
-    if args.selection_batch is None:
-        args.selection_batch = args.batch
+  
     if args.save_path != "" and not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
     if not os.path.exists(args.data_path):
@@ -194,130 +170,89 @@ def main():
             test_loader = torch.utils.data.DataLoader(dst_test, batch_size=args.train_batch, shuffle=False,
                                                       num_workers=args.workers, pin_memory=True)
 
-        # Listing cross-architecture experiment settings if specified.
-        models = [args.model]
-        if isinstance(args.cross, list):
-            for model in args.cross:
-                if model != args.model:
-                    models.append(model)
-
-        for model in models:
-            if len(models) > 1:
-                print("| Training on model %s" % model)
-
-            network = nets.__dict__[model](channel, num_classes, im_size)
-
-            if args.device == "cpu":
-                print("Using CPU.")
-            elif args.gpu is not None:
-                torch.cuda.set_device(args.gpu[0])
-                network = nets.nets_utils.MyDataParallel(network, device_ids=args.gpu)
-            elif torch.cuda.device_count() > 1:
-                network = nets.nets_utils.MyDataParallel(network).cuda()
-            else:
-                # Una sola GPU visible o modo CPU
-                network = network.to(args.device)
-                
-            print(f"Model device: {next(network.parameters()).device}")
-
-            if "state_dict" in checkpoint.keys():
-                # Loading model state_dict
-                network.load_state_dict(checkpoint["state_dict"])
-
-            criterion = nn.CrossEntropyLoss(reduction='none').to(args.device)
-
-            # Optimizer
-            if args.optimizer == "SGD":
-                optimizer = torch.optim.SGD(network.parameters(), args.lr, momentum=args.momentum,
-                                            weight_decay=args.weight_decay, nesterov=args.nesterov)
-            elif args.optimizer == "Adam":
-                optimizer = torch.optim.Adam(network.parameters(), args.lr, weight_decay=args.weight_decay)
-            else:
-                optimizer = torch.optim.__dict__[args.optimizer](network.parameters(), args.lr, momentum=args.momentum,
-                                                                 weight_decay=args.weight_decay, nesterov=args.nesterov)
-
-            # LR scheduler
-            if args.scheduler == "CosineAnnealingLR":
-                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(train_loader) * args.epochs,
-                                                                       eta_min=args.min_lr)
-            elif args.scheduler == "StepLR":
-                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=len(train_loader) * args.step_size,
-                                                            gamma=args.gamma)
-            else:
-                scheduler = torch.optim.lr_scheduler.__dict__[args.scheduler](optimizer)
-            scheduler.last_epoch = (start_epoch - 1) * len(train_loader)
-
-            if "opt_dict" in checkpoint.keys():
-                optimizer.load_state_dict(checkpoint["opt_dict"])
-
-            # Log recorder
-            if "rec" in checkpoint.keys():
-                rec = checkpoint["rec"]
-            else:
-                rec = init_recorder()
-
-            best_prec1 = checkpoint["best_acc1"] if "best_acc1" in checkpoint.keys() else 0.0
-
-            # Save the checkpont with only the susbet.
-            if args.save_path != "" and args.resume == "":
+       
+       
+        
+        network = nets.__dict__[model](channel, num_classes, im_size)
+        if args.device == "cpu":
+            print("Using CPU.")
+        elif args.gpu is not None:
+            torch.cuda.set_device(args.gpu[0])
+            network = nets.nets_utils.MyDataParallel(network, device_ids=args.gpu)
+        elif torch.cuda.device_count() > 1:
+            network = nets.nets_utils.MyDataParallel(network).cuda()
+        else:
+            # Una sola GPU visible o modo CPU
+            network = network.to(args.device)
+            
+        print(f"Model device: {next(network.parameters()).device}")
+        if "state_dict" in checkpoint.keys():
+            # Loading model state_dict
+            network.load_state_dict(checkpoint["state_dict"])
+        criterion = nn.CrossEntropyLoss(reduction='none').to(args.device)
+        # Optimizer       
+        optimizer = torch.optim.Adam(network.parameters(), args.lr)          
+        
+        # Log recorder
+        if "rec" in checkpoint.keys():
+            rec = checkpoint["rec"]
+        else:
+            rec = init_recorder()
+        best_prec1 = checkpoint["best_acc1"] if "best_acc1" in checkpoint.keys() else 0.0
+        # Save the checkpont with only the susbet.
+        if args.save_path != "" and args.resume == "":
+            save_checkpoint({"exp": exp,
+                             "subset": subset,
+                             "sel_args": selection_args},
+                            os.path.join(args.save_path, checkpoint_name + ("" if model == args.model else model
+                                         + "_") + "unknown.ckpt"), 0, 0.)
+        for epoch in range(start_epoch, args.epochs):
+            # train for one epoch
+            train(train_loader, network, criterion, optimizer, scheduler, epoch, args, rec, if_weighted=if_weighted)
+            # evaluate on validation set
+            if args.test_interval > 0 and (epoch + 1) % args.test_interval == 0:
+                prec1 = test(test_loader, network, criterion, epoch, args, rec)
+                # remember best prec@1 and save checkpoint
+                is_best = prec1 > best_prec1
+                if is_best:
+                    best_prec1 = prec1
+                    if args.save_path != "":
+                        rec = record_ckpt(rec, epoch)
+                        save_checkpoint({"exp": exp,
+                                         "epoch": epoch + 1,
+                                         "state_dict": network.state_dict(),
+                                         "opt_dict": optimizer.state_dict(),
+                                         "best_acc1": best_prec1,
+                                         "rec": rec,
+                                         "subset": subset,
+                                         "sel_args": selection_args},
+                                        os.path.join(args.save_path, checkpoint_name + (
+                                            "" if model == args.model else model + "_") + "unknown.ckpt"),
+                                        epoch=epoch, prec=best_prec1)
+        # Prepare for the next checkpoint
+        if args.save_path != "":
+            try:
+                os.rename(
+                    os.path.join(args.save_path, checkpoint_name + ("" if model == args.model else model + "_") +
+                                 "unknown.ckpt"), os.path.join(args.save_path, checkpoint_name +
+                                 ("" if model == args.model else model + "_") + "%f.ckpt" % best_prec1))
+            except:
                 save_checkpoint({"exp": exp,
+                                 "epoch": args.epochs,
+                                 "state_dict": network.state_dict(),
+                                 "opt_dict": optimizer.state_dict(),
+                                 "best_acc1": best_prec1,
+                                 "rec": rec,
                                  "subset": subset,
                                  "sel_args": selection_args},
-                                os.path.join(args.save_path, checkpoint_name + ("" if model == args.model else model
-                                             + "_") + "unknown.ckpt"), 0, 0.)
-
-            for epoch in range(start_epoch, args.epochs):
-                # train for one epoch
-                train(train_loader, network, criterion, optimizer, scheduler, epoch, args, rec, if_weighted=if_weighted)
-
-                # evaluate on validation set
-                if args.test_interval > 0 and (epoch + 1) % args.test_interval == 0:
-                    prec1 = test(test_loader, network, criterion, epoch, args, rec)
-
-                    # remember best prec@1 and save checkpoint
-                    is_best = prec1 > best_prec1
-
-                    if is_best:
-                        best_prec1 = prec1
-                        if args.save_path != "":
-                            rec = record_ckpt(rec, epoch)
-                            save_checkpoint({"exp": exp,
-                                             "epoch": epoch + 1,
-                                             "state_dict": network.state_dict(),
-                                             "opt_dict": optimizer.state_dict(),
-                                             "best_acc1": best_prec1,
-                                             "rec": rec,
-                                             "subset": subset,
-                                             "sel_args": selection_args},
-                                            os.path.join(args.save_path, checkpoint_name + (
-                                                "" if model == args.model else model + "_") + "unknown.ckpt"),
-                                            epoch=epoch, prec=best_prec1)
-
-            # Prepare for the next checkpoint
-            if args.save_path != "":
-                try:
-                    os.rename(
-                        os.path.join(args.save_path, checkpoint_name + ("" if model == args.model else model + "_") +
-                                     "unknown.ckpt"), os.path.join(args.save_path, checkpoint_name +
-                                     ("" if model == args.model else model + "_") + "%f.ckpt" % best_prec1))
-                except:
-                    save_checkpoint({"exp": exp,
-                                     "epoch": args.epochs,
-                                     "state_dict": network.state_dict(),
-                                     "opt_dict": optimizer.state_dict(),
-                                     "best_acc1": best_prec1,
-                                     "rec": rec,
-                                     "subset": subset,
-                                     "sel_args": selection_args},
-                                    os.path.join(args.save_path, checkpoint_name +
-                                                 ("" if model == args.model else model + "_") + "%f.ckpt" % best_prec1),
-                                    epoch=args.epochs - 1,
-                                    prec=best_prec1)
-
-            print('| Best accuracy: ', best_prec1, ", on model " + model if len(models) > 1 else "", end="\n\n")
-            start_epoch = 0
-            checkpoint = {}
-            sleep(2)
+                                os.path.join(args.save_path, checkpoint_name +
+                                             ("" if model == args.model else model + "_") + "%f.ckpt" % best_prec1),
+                                epoch=args.epochs - 1,
+                                prec=best_prec1)
+        print('| Best accuracy: ', best_prec1, ", on model " + model if len(models) > 1 else "", end="\n\n")
+        start_epoch = 0
+        checkpoint = {}
+        sleep(2)
 
 
 if __name__ == '__main__':
