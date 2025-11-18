@@ -59,46 +59,61 @@ def train(train_loader, network, criterion, optimizer, epoch, args, rec):
 
     record_train_stats(rec, epoch, losses.avg, top1.avg, optimizer.state_dict()['param_groups'][0]['lr'])
 
-def load_mnist_data_subset(data_path="../data/MNIST/subset"):
-    """
-    Load MNIST subset data from .npz files.
+class CustomTensorDataset(torch.utils.data.TensorDataset):
+    """TensorDataset with .classes attribute for compatibility with DeepCore methods"""
+    def __init__(self, tensors, classes=None):
+        super().__init__(*tensors)
+        if classes is None:
+            # Infer classes from labels
+            self.classes = list(range(len(torch.unique(tensors[1]))))
+        else:
+            self.classes = classes
+        self.targets = tensors[1].numpy() if isinstance(tensors[1], torch.Tensor) else tensors[1]
+
+def load_mnist_data_subset(data_path="../data/MNIST/subset", dataset_name='mnist'):
+    """Load custom .npz dataset and return in DeepCore format"""
+    train_path = os.path.join(data_path, f"{dataset_name}-train.npz")
+    val_path = os.path.join(data_path, f"{dataset_name}-val.npz")
+    test_path = os.path.join(data_path, f"{dataset_name}-test.npz")
     
-    Args:
-        data_path: Path to the subset directory (default: "../data/MNIST/subset")
-    
-    Returns:
-        X_train: Training images tensor
-        y_train: Training labels tensor
-        X_val: Validation images tensor
-        y_val: Validation labels tensor
-        X_test: Test images tensor
-        y_test: Test labels tensor
-    """
-    # Load train data
-    train_path = os.path.join(data_path, "mnist-train.npz")
+    # Load train
     train_data = np.load(train_path)
     X_train = torch.from_numpy(train_data['images']).float()
     y_train = torch.from_numpy(train_data['labels']).long()
     
-    data_path_val_test = '../data/MNIST/subset'
-    
-    # Load validation data
-    val_path = os.path.join(data_path_val_test, "mnist-val.npz")
+    # Load val
     val_data = np.load(val_path)
     X_val = torch.from_numpy(val_data['images']).float()
     y_val = torch.from_numpy(val_data['labels']).long()
     
-    # Load test data
-    test_path = os.path.join(data_path_val_test, "mnist-test.npz")
+    # Load test
     test_data = np.load(test_path)
     X_test = torch.from_numpy(test_data['images']).float()
     y_test = torch.from_numpy(test_data['labels']).long()
     
-    print(f"Loaded train data: {X_train.shape}")
-    print(f"Loaded validation data: {X_val.shape}")
-    print(f"Loaded test data: {X_test.shape}")
+    # Infer dataset properties
+    if len(X_train.shape) == 3:  # (N, H, W) -> add channel
+        X_train = X_train.unsqueeze(1)
+        X_val = X_val.unsqueeze(1)
+        X_test = X_test.unsqueeze(1)
     
-    return X_train, y_train, X_val, y_val, X_test, y_test
+    channel = X_train.shape[1]
+    im_size = (X_train.shape[2], X_train.shape[3])
+    num_classes = len(torch.unique(y_train))
+    class_names = [str(i) for i in range(num_classes)]
+    
+    # Compute mean and std
+    mean = [X_train.mean().item()]
+    std = [X_train.std().item()]
+    
+    # Create CustomTensorDatasets with .classes attribute
+    dst_train = CustomTensorDataset((X_train, y_train))
+    dst_test = CustomTensorDataset((X_test, y_test))
+    
+    print(f"Loaded custom dataset: train={X_train.shape}, val={X_val.shape}, test={X_test.shape}")
+    
+    return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test
+
 
 def test(test_loader, network, criterion, epoch, args, rec):
     batch_time = AverageMeter('Time', ':6.3f')

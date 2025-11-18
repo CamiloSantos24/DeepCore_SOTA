@@ -2,59 +2,12 @@ import os
 import json
 import time
 import torch
-import torch.nn as nn
 import numpy as np
 import argparse
-from torch.utils.data import TensorDataset
 import deepcore.nets as nets
 import deepcore.datasets as datasets
 import deepcore.methods as methods
 from utils import *
-
-
-def load_custom_npz(data_path, dataset_name='custom'):
-    """Load custom .npz dataset"""
-    train_path = os.path.join(data_path, f"{dataset_name}-train.npz")
-    val_path = os.path.join(data_path, f"{dataset_name}-val.npz")
-    test_path = os.path.join(data_path, f"{dataset_name}-test.npz")
-    
-    # Load train
-    train_data = np.load(train_path)
-    X_train = torch.from_numpy(train_data['images']).float()
-    y_train = torch.from_numpy(train_data['labels']).long()
-    
-    # Load val
-    val_data = np.load(val_path)
-    X_val = torch.from_numpy(val_data['images']).float()
-    y_val = torch.from_numpy(val_data['labels']).long()
-    
-    # Load test
-    test_data = np.load(test_path)
-    X_test = torch.from_numpy(test_data['images']).float()
-    y_test = torch.from_numpy(test_data['labels']).long()
-    
-    # Infer dataset properties
-    if len(X_train.shape) == 3:  # (N, H, W) -> add channel
-        X_train = X_train.unsqueeze(1)
-        X_val = X_val.unsqueeze(1)
-        X_test = X_test.unsqueeze(1)
-    
-    channel = X_train.shape[1]
-    im_size = (X_train.shape[2], X_train.shape[3])
-    num_classes = len(torch.unique(y_train))
-    class_names = [str(i) for i in range(num_classes)]
-    
-    # Compute mean and std
-    mean = [X_train.mean().item()]
-    std = [X_train.std().item()]
-    
-    # Create datasets
-    dst_train = TensorDataset(X_train, y_train)
-    dst_test = TensorDataset(X_test, y_test)
-    
-    print(f"Loaded custom dataset: train={X_train.shape}, val={X_val.shape}, test={X_test.shape}")
-    
-    return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test
 
 
 def main():
@@ -133,14 +86,15 @@ def main():
     
     # Load dataset
     if args.input_data is not None:
-        # Load custom .npz
+        # Load custom .npz using utils function
         channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test = \
-            load_custom_npz(args.input_data, dataset_name='mnist')  # adjust name as needed
-        args.dataset = 'custom'
+            load_mnist_data_subset(args.input_data, dataset_name='mnist')
+        dataset_name = 'custom'
     else:
         # Load torchvision dataset
         channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test = \
             datasets.__dict__[args.dataset](args.data_path)
+        dataset_name = args.dataset
     
     args.channel = channel
     args.im_size = im_size
@@ -164,7 +118,7 @@ def main():
         print(f"{'='*80}\n")
         
         # Create experiment directory
-        exp_name = f"{args.selection}_{args.dataset}_frac{args.fraction}_seed{exp_seed}"
+        exp_name = f"{args.selection}_{dataset_name}_frac{args.fraction}_seed{exp_seed}"
         exp_dir = os.path.join(args.save_path, exp_name)
         os.makedirs(exp_dir, exist_ok=True)
         
@@ -210,7 +164,7 @@ def main():
             # Save metadata
             metadata = {
                 'method': args.selection,
-                'dataset': args.dataset,
+                'dataset': dataset_name,
                 'model': args.model,
                 'fraction': args.fraction,
                 'seed': exp_seed,
