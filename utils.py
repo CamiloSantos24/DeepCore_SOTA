@@ -1,8 +1,6 @@
 import time, torch
 from argparse import ArgumentTypeError
 from prefetch_generator import BackgroundGenerator
-import numpy as np 
-import os 
 
 
 class WeightedSubset(torch.utils.data.Subset):
@@ -18,7 +16,7 @@ class WeightedSubset(torch.utils.data.Subset):
         return self.dataset[self.indices[idx]], self.weights[idx]
 
 
-def train(train_loader, network, criterion, optimizer, epoch, args, rec):
+def train(train_loader, network, criterion, optimizer, scheduler, epoch, args, rec, if_weighted: bool = False):
     """Train for one epoch on the training set"""
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -30,11 +28,21 @@ def train(train_loader, network, criterion, optimizer, epoch, args, rec):
     end = time.time()
     for i, contents in enumerate(train_loader):
         optimizer.zero_grad()
-        
-        target = contents[1].to(args.device)
-        input = contents[0].to(args.device)        # Compute output
-        output = network(input)
-        loss = criterion(output, target).mean()
+        if if_weighted:
+            target = contents[0][1].to(args.device)
+            input = contents[0][0].to(args.device)
+
+            # Compute output
+            output = network(input)
+            weights = contents[1].to(args.device).requires_grad_(False)
+            loss = torch.sum(criterion(output, target) * weights) / torch.sum(weights)
+        else:
+            target = contents[1].to(args.device)
+            input = contents[0].to(args.device)
+
+            # Compute output
+            output = network(input)
+            loss = criterion(output, target).mean()
 
         # Measure accuracy and record loss
         prec1 = accuracy(output.data, target, topk=(1,))[0]
@@ -43,7 +51,8 @@ def train(train_loader, network, criterion, optimizer, epoch, args, rec):
 
         # Compute gradient and do SGD step
         loss.backward()
-        optimizer.step()        
+        optimizer.step()
+        scheduler.step()
 
         # Measure elapsed time
         batch_time.update(time.time() - end)
@@ -58,61 +67,6 @@ def train(train_loader, network, criterion, optimizer, epoch, args, rec):
                 loss=losses, top1=top1))
 
     record_train_stats(rec, epoch, losses.avg, top1.avg, optimizer.state_dict()['param_groups'][0]['lr'])
-
-class CustomTensorDataset(torch.utils.data.TensorDataset):
-    """TensorDataset with .classes attribute for compatibility with DeepCore methods"""
-    def __init__(self, tensors, classes=None):
-        super().__init__(*tensors)
-        if classes is None:
-            # Infer classes from labels
-            self.classes = list(range(len(torch.unique(tensors[1]))))
-        else:
-            self.classes = classes
-        self.targets = tensors[1].numpy() if isinstance(tensors[1], torch.Tensor) else tensors[1]
-
-def load_mnist_data_subset(data_path="../data/MNIST/subset", dataset_name='mnist'):
-    """Load custom .npz dataset and return in DeepCore format"""
-    train_path = os.path.join(data_path, f"{dataset_name}-train.npz")
-    val_path = os.path.join(data_path, f"{dataset_name}-val.npz")
-    test_path = os.path.join(data_path, f"{dataset_name}-test.npz")
-    
-    # Load train
-    train_data = np.load(train_path)
-    X_train = torch.from_numpy(train_data['images']).float()
-    y_train = torch.from_numpy(train_data['labels']).long()
-    
-    # Load val
-    val_data = np.load(val_path)
-    X_val = torch.from_numpy(val_data['images']).float()
-    y_val = torch.from_numpy(val_data['labels']).long()
-    
-    # Load test
-    test_data = np.load(test_path)
-    X_test = torch.from_numpy(test_data['images']).float()
-    y_test = torch.from_numpy(test_data['labels']).long()
-    
-    # Infer dataset properties
-    if len(X_train.shape) == 3:  # (N, H, W) -> add channel
-        X_train = X_train.unsqueeze(1)
-        X_val = X_val.unsqueeze(1)
-        X_test = X_test.unsqueeze(1)
-    
-    channel = X_train.shape[1]
-    im_size = (X_train.shape[2], X_train.shape[3])
-    num_classes = len(torch.unique(y_train))
-    class_names = [str(i) for i in range(num_classes)]
-    
-    # Compute mean and std
-    mean = [X_train.mean().item()]
-    std = [X_train.std().item()]
-    
-    # Create CustomTensorDatasets with .classes attribute
-    dst_train = CustomTensorDataset((X_train, y_train))
-    dst_test = CustomTensorDataset((X_test, y_test))
-    
-    print(f"Loaded custom dataset: train={X_train.shape}, val={X_val.shape}, test={X_test.shape}")
-    
-    return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test
 
 
 def test(test_loader, network, criterion, epoch, args, rec):
