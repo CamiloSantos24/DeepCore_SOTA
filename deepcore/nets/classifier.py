@@ -82,4 +82,4 @@ class ModelM7_small(nn.Module):
 
     def forward(self, x):
         logits = self.get_logits(x)
-        return logitss
+        return logits
